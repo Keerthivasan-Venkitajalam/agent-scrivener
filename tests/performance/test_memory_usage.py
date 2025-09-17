@@ -560,5 +560,149 @@ class TestMemoryUsage:
                 assert metrics.memory_growth_mb < 200  # Total growth < 200MB
 
 
+    @pytest.mark.asyncio
+    async def test_memory_usage_under_concurrent_load(self):
+        """Test memory usage patterns under concurrent load."""
+        config = MockServiceConfig(
+            web_search_delay=0.002,
+            api_query_delay=0.002,
+            analysis_delay=0.005,
+            failure_rate=0.0
+        )
+        
+        framework = IntegrationTestFramework(config)
+        
+        async with framework.test_environment():
+            # Test memory usage with different concurrent loads
+            concurrency_levels = [1, 5, 10, 15]
+            memory_results = []
+            
+            for concurrency in concurrency_levels:
+                profiler = MemoryProfiler(sampling_interval=0.2)
+                profiler.start_profiling()
+                
+                try:
+                    queries = TestDataGenerator.generate_research_queries()[:concurrency]
+                    tasks = [
+                        asyncio.create_task(framework.run_end_to_end_test(query))
+                        for query in queries
+                    ]
+                    
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    successful = sum(
+                        1 for r in results 
+                        if not isinstance(r, Exception) and "session" in r and r["session"].status == TaskStatus.COMPLETED
+                    )
+                    
+                finally:
+                    metrics = profiler.stop_profiling()
+                
+                memory_per_request = metrics.memory_growth_mb / concurrency if concurrency > 0 else 0
+                
+                memory_results.append({
+                    "concurrency": concurrency,
+                    "successful_requests": successful,
+                    "memory_growth_mb": metrics.memory_growth_mb,
+                    "peak_memory_mb": metrics.peak_memory_mb,
+                    "memory_per_request_mb": memory_per_request,
+                    "peak_threads": metrics.peak_threads
+                })
+                
+                print(f"\nConcurrency {concurrency} Memory Results:")
+                print(f"  Memory Growth: {metrics.memory_growth_mb:.2f}MB")
+                print(f"  Memory per Request: {memory_per_request:.2f}MB")
+                print(f"  Peak Memory: {metrics.peak_memory_mb:.2f}MB")
+                print(f"  Peak Threads: {metrics.peak_threads}")
+                
+                # Memory usage assertions
+                assert metrics.memory_growth_mb < concurrency * 50  # < 50MB per concurrent request
+                assert memory_per_request < 100  # < 100MB per request
+                assert metrics.peak_threads < concurrency * 10  # Reasonable thread usage
+                
+                # Brief pause between tests
+                gc.collect()
+                await asyncio.sleep(1.0)
+            
+            # Analyze memory scaling
+            baseline = memory_results[0]
+            
+            for result in memory_results[1:]:
+                concurrency_factor = result["concurrency"] / baseline["concurrency"]
+                memory_factor = result["memory_growth_mb"] / max(baseline["memory_growth_mb"], 1)
+                
+                # Memory should scale sub-linearly
+                assert memory_factor <= concurrency_factor * 1.5
+                
+                print(f"Concurrency {result['concurrency']}: Memory scaling factor {memory_factor:.2f}")
+    
+    @pytest.mark.asyncio
+    async def test_resource_consumption_monitoring(self):
+        """Test comprehensive resource consumption monitoring."""
+        config = MockServiceConfig(
+            web_search_delay=0.01,
+            api_query_delay=0.01,
+            analysis_delay=0.02,
+            failure_rate=0.0
+        )
+        
+        framework = IntegrationTestFramework(config)
+        profiler = MemoryProfiler(sampling_interval=0.5)
+        
+        async with framework.test_environment():
+            profiler.start_profiling()
+            
+            try:
+                # Execute a series of operations to monitor resource consumption
+                queries = TestDataGenerator.generate_research_queries()[:8]
+                
+                for i, query in enumerate(queries):
+                    print(f"Executing operation {i+1}/{len(queries)}")
+                    
+                    try:
+                        result = await framework.run_end_to_end_test(query)
+                        if result["session"].status == TaskStatus.COMPLETED:
+                            print(f"  ✓ Operation {i+1} completed successfully")
+                        else:
+                            print(f"  ⚠ Operation {i+1} completed with issues")
+                    except Exception as e:
+                        print(f"  ✗ Operation {i+1} failed: {e}")
+                    
+                    # Monitor resources between operations
+                    current_metrics = profiler.resource_monitor.get_metrics()
+                    print(f"  Memory: {current_metrics['current_memory_mb']:.1f}MB, "
+                          f"CPU: {current_metrics['average_cpu_percent']:.1f}%")
+                    
+                    await asyncio.sleep(0.5)
+                
+            finally:
+                metrics = profiler.stop_profiling()
+            
+            # Comprehensive resource analysis
+            print(f"\nComprehensive Resource Consumption Analysis:")
+            print(f"Initial Memory: {metrics.initial_memory_mb:.2f}MB")
+            print(f"Peak Memory: {metrics.peak_memory_mb:.2f}MB")
+            print(f"Final Memory: {metrics.final_memory_mb:.2f}MB")
+            print(f"Total Memory Growth: {metrics.memory_growth_mb:.2f}MB")
+            print(f"Average Memory: {metrics.average_memory_mb:.2f}MB")
+            print(f"Memory Leak Rate: {metrics.memory_leak_rate_mb_per_hour:.2f}MB/hour")
+            print(f"Peak CPU: {metrics.peak_cpu_percent:.2f}%")
+            print(f"Average CPU: {metrics.average_cpu_percent:.2f}%")
+            print(f"Peak Threads: {metrics.peak_threads}")
+            print(f"Average Threads: {metrics.average_threads:.1f}")
+            print(f"Peak File Descriptors: {metrics.peak_file_descriptors}")
+            print(f"I/O Read: {metrics.io_read_mb:.2f}MB")
+            print(f"I/O Write: {metrics.io_write_mb:.2f}MB")
+            print(f"Context Switches: {metrics.context_switches}")
+            print(f"Page Faults: {metrics.page_faults}")
+            
+            # Resource consumption assertions
+            assert metrics.memory_growth_mb < 400  # Total growth < 400MB
+            assert metrics.memory_leak_rate_mb_per_hour < 1000  # Leak rate < 1GB/hour
+            assert metrics.peak_threads < 100  # Reasonable thread count
+            assert metrics.peak_file_descriptors < 200  # Reasonable FD usage
+            assert metrics.io_read_mb >= 0 and metrics.io_write_mb >= 0  # Valid I/O metrics
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

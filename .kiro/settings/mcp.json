@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "academic-search": {
+      "command": "uvx",
+      "args": ["academic-search-mcp@latest"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "disabled": false,
+      "autoApprove": ["search_papers", "get_paper_details"]
+    },
+    "web-research": {
+      "command": "uvx", 
+      "args": ["web-research-mcp@latest"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "disabled": false,
+      "autoApprove": ["extract_content", "search_web"]
+    },
+    "citation-formatter": {
+      "command": "uvx",
+      "args": ["citation-mcp@latest"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "disabled": false,
+      "autoApprove": ["format_citation", "validate_doi"]
+    }
+  }
+}

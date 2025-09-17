@@ -1,0 +1,147 @@
+# AgentCore Runtime Configuration for Agent Scrivener
+apiVersion: agentcore/v1
+kind: AgentConfiguration
+metadata:
+  name: agent-scrivener
+  version: "1.0.0"
+  description: "Multi-agent research and content synthesis platform"
+
+spec:
+  runtime:
+    memory: "2048Mi"
+    timeout: "28800s"  # 8 hours
+    concurrency: 10
+    scaling:
+      minInstances: 1
+      maxInstances: 5
+      targetConcurrency: 8
+      scaleUpDelay: "30s"
+      scaleDownDelay: "300s"
+
+  agents:
+    - name: planner-agent
+      type: orchestrator
+      memory: "512Mi"
+      timeout: "300s"
+      environment:
+        AGENT_TYPE: "planner"
+        MAX_TASK_DEPTH: "5"
+        STRANDS_ENABLED: "true"
+
+    - name: research-agent
+      type: worker
+      memory: "1024Mi"
+      timeout: "1800s"
+      environment:
+        AGENT_TYPE: "research"
+        MAX_SOURCES: "10"
+        BROWSER_TIMEOUT: "30s"
+        NOVA_ACT_ENABLED: "true"
+
+    - name: api-agent
+      type: worker
+      memory: "512Mi"
+      timeout: "600s"
+      environment:
+        AGENT_TYPE: "api"
+        RATE_LIMIT_REQUESTS: "100"
+        RATE_LIMIT_WINDOW: "60"
+
+    - name: analysis-agent
+      type: worker
+      memory: "1536Mi"
+      timeout: "3600s"
+      environment:
+        AGENT_TYPE: "analysis"
+        CODE_INTERPRETER_ENABLED: "true"
+        MAX_ANALYSIS_ITEMS: "50"
+
+    - name: drafting-agent
+      type: worker
+      memory: "1024Mi"
+      timeout: "1800s"
+      environment:
+        AGENT_TYPE: "drafting"
+        MAX_DOCUMENT_LENGTH: "50000"
+
+    - name: citation-agent
+      type: worker
+      memory: "512Mi"
+      timeout: "600s"
+      environment:
+        AGENT_TYPE: "citation"
+        CITATION_STYLE: "APA"
+        VERIFY_URLS: "true"
+
+  tools:
+    browser:
+      enabled: true
+      config:
+        timeout: "30s"
+        maxPages: 10
+        userAgent: "AgentScrivener/1.0"
+    
+    gateway:
+      enabled: true
+      config:
+        timeout: "60s"
+        retryAttempts: 3
+        rateLimitEnabled: true
+    
+    codeInterpreter:
+      enabled: true
+      config:
+        timeout: "300s"
+        maxExecutionTime: "180s"
+        allowedPackages:
+          - "pandas"
+          - "numpy"
+          - "matplotlib"
+          - "seaborn"
+          - "scikit-learn"
+          - "spacy"
+          - "nltk"
+    
+    memory:
+      enabled: true
+      config:
+        type: "persistent"
+        maxSize: "1Gi"
+        ttl: "7d"
+
+  security:
+    networkPolicy:
+      ingress:
+        - from: "api-gateway"
+          ports: [8000]
+      egress:
+        - to: "external-apis"
+          ports: [80, 443]
+        - to: "bedrock"
+          ports: [443]
+    
+    secrets:
+      - name: "aws-credentials"
+        type: "aws-iam-role"
+      - name: "api-keys"
+        type: "kubernetes-secret"
+
+  monitoring:
+    metrics:
+      enabled: true
+      port: 9090
+      path: "/metrics"
+    
+    logging:
+      level: "INFO"
+      format: "json"
+      destinations:
+        - "cloudwatch"
+        - "stdout"
+    
+    healthCheck:
+      enabled: true
+      path: "/health"
+      interval: "30s"
+      timeout: "10s"
+      failureThreshold: 3

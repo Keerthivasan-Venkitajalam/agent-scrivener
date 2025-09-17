@@ -1,0 +1,10 @@
+name: "Performance Benchmark"
+description: "Run comprehensive performance tests and generate reports"
+trigger:
+  type: "manual"
+  button_text: "Run Performance Tests"
+actions:
+  - type: "shell_command"
+    command: "python scripts/run_performance_tests.py --generate-report"
+  - type: "agent_execution"
+    prompt: "Analyze the performance test results and suggest optimizations for any bottlenecks found"

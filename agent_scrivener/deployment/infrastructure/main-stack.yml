@@ -1,0 +1,306 @@
+# Main CloudFormation Stack for Agent Scrivener
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Complete infrastructure stack for Agent Scrivener multi-agent research platform'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: development
+    AllowedValues: [development, staging, production]
+    Description: Deployment environment
+  
+  ProjectName:
+    Type: String
+    Default: agent-scrivener
+    Description: Project name for resource naming
+  
+  AlertEmail:
+    Type: String
+    Description: Email address for critical alerts
+    Default: admin@example.com
+  
+  AgentCoreEndpoint:
+    Type: String
+    Description: AgentCore Runtime endpoint URL
+    Default: https://your-agentcore-endpoint.com
+  
+  DomainName:
+    Type: String
+    Default: ''
+    Description: Custom domain name for API (optional)
+  
+  CertificateArn:
+    Type: String
+    Default: ''
+    Description: ACM certificate ARN for custom domain (optional)
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, production]
+  HasCustomDomain: !Not [!Equals [!Ref DomainName, '']]
+
+Resources:
+  # IAM Roles and Security Stack
+  IAMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./iam-roles.yml
+      Parameters:
+        Environment: !Ref Environment
+        ProjectName: !Ref ProjectName
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Component
+          Value: IAM
+
+  # API Gateway Stack
+  APIGatewayStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: IAMStack
+    Properties:
+      TemplateURL: ./api-gateway.yml
+      Parameters:
+        Environment: !Ref Environment
+        AgentCoreEndpoint: !Ref AgentCoreEndpoint
+        DomainName: !Ref DomainName
+        CertificateArn: !Ref CertificateArn
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Component
+          Value: API
+
+  # CloudWatch Monitoring Stack
+  MonitoringStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - IAMStack
+      - APIGatewayStack
+    Properties:
+      TemplateURL: ./cloudwatch-monitoring.yml
+      Parameters:
+        Environment: !Ref Environment
+        ProjectName: !Ref ProjectName
+        AlertEmail: !Ref AlertEmail
+        APIGatewayId: !GetAtt APIGatewayStack.Outputs.APIGatewayId
+        AlertTopicArn: !GetAtt IAMStack.Outputs.AlertTopicArn
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Component
+          Value: Monitoring
+
+  # VPC Stack (for production environments)
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: IsProduction
+    Properties:
+      TemplateURL: ./vpc-networking.yml
+      Parameters:
+        Environment: !Ref Environment
+        ProjectName: !Ref ProjectName
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Component
+          Value: Networking
+
+  # Secrets and Configuration
+  JWTSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${ProjectName}/jwt-secret'
+      Description: 'JWT secret key for Agent Scrivener authentication'
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: 'secret'
+        PasswordLength: 64
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  DatabaseCredentials:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${ProjectName}/database-credentials'
+      Description: 'Database credentials for Agent Scrivener'
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "agent_user"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  ExternalAPIKeys:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${ProjectName}/external-api-keys'
+      Description: 'External API keys for Agent Scrivener'
+      SecretString: !Sub |
+        {
+          "semantic_scholar": "your-semantic-scholar-api-key",
+          "pubmed": "your-pubmed-api-key",
+          "arxiv": "your-arxiv-api-key"
+        }
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Parameter Store Configuration
+  BedrockModelParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/${ProjectName}/bedrock/model-id'
+      Type: String
+      Value: 'anthropic.claude-3-sonnet-20240229-v1:0'
+      Description: 'Bedrock model ID for Agent Scrivener'
+      Tags:
+        Environment: !Ref Environment
+        Project: !Ref ProjectName
+
+  MaxConcurrencyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/${ProjectName}/config/max-concurrency'
+      Type: String
+      Value: !If [IsProduction, '20', '10']
+      Description: 'Maximum concurrent sessions'
+      Tags:
+        Environment: !Ref Environment
+        Project: !Ref ProjectName
+
+  SessionTimeoutParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/${ProjectName}/config/session-timeout'
+      Type: String
+      Value: '28800'  # 8 hours
+      Description: 'Session timeout in seconds'
+      Tags:
+        Environment: !Ref Environment
+        Project: !Ref ProjectName
+
+  # Cost Allocation Tags
+  CostAllocationTagging:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-resources'
+      Description: !Sub 'Resource group for ${ProjectName} ${Environment} environment'
+      ResourceQuery:
+        Type: TAG_FILTERS_1_0
+        Query:
+          ResourceTypeFilters:
+            - AWS::AllSupported
+          TagFilters:
+            - Key: Project
+              Values: [!Ref ProjectName]
+            - Key: Environment
+              Values: [!Ref Environment]
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  # API Endpoints
+  APIGatewayURL:
+    Description: 'API Gateway endpoint URL'
+    Value: !GetAtt APIGatewayStack.Outputs.APIGatewayURL
+    Export:
+      Name: !Sub '${AWS::StackName}-APIGatewayURL'
+
+  CustomDomainURL:
+    Condition: HasCustomDomain
+    Description: 'Custom domain URL'
+    Value: !GetAtt APIGatewayStack.Outputs.CustomDomainURL
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomDomainURL'
+
+  APIKey:
+    Description: 'API Key for accessing the service'
+    Value: !GetAtt APIGatewayStack.Outputs.APIKey
+    Export:
+      Name: !Sub '${AWS::StackName}-APIKey'
+
+  # IAM Roles
+  AgentCoreExecutionRoleArn:
+    Description: 'AgentCore execution role ARN'
+    Value: !GetAtt IAMStack.Outputs.AgentCoreExecutionRoleArn
+    Export:
+      Name: !Sub '${AWS::StackName}-AgentCoreExecutionRoleArn'
+
+  # Storage Resources
+  TempDataBucketName:
+    Description: 'Temporary data bucket name'
+    Value: !GetAtt IAMStack.Outputs.TempDataBucketName
+    Export:
+      Name: !Sub '${AWS::StackName}-TempDataBucketName'
+
+  MemoryTableName:
+    Description: 'Memory store DynamoDB table name'
+    Value: !GetAtt IAMStack.Outputs.MemoryTableName
+    Export:
+      Name: !Sub '${AWS::StackName}-MemoryTableName'
+
+  # Monitoring
+  DashboardURL:
+    Description: 'CloudWatch Dashboard URL'
+    Value: !GetAtt MonitoringStack.Outputs.DashboardURL
+    Export:
+      Name: !Sub '${AWS::StackName}-DashboardURL'
+
+  # Secrets
+  JWTSecretArn:
+    Description: 'JWT secret ARN'
+    Value: !Ref JWTSecret
+    Export:
+      Name: !Sub '${AWS::StackName}-JWTSecretArn'
+
+  DatabaseCredentialsArn:
+    Description: 'Database credentials secret ARN'
+    Value: !Ref DatabaseCredentials
+    Export:
+      Name: !Sub '${AWS::StackName}-DatabaseCredentialsArn'
+
+  ExternalAPIKeysArn:
+    Description: 'External API keys secret ARN'
+    Value: !Ref ExternalAPIKeys
+    Export:
+      Name: !Sub '${AWS::StackName}-ExternalAPIKeysArn'
+
+  # Configuration
+  StackName:
+    Description: 'CloudFormation stack name'
+    Value: !Ref AWS::StackName
+    Export:
+      Name: !Sub '${AWS::StackName}-StackName'
+
+  Environment:
+    Description: 'Deployment environment'
+    Value: !Ref Environment
+    Export:
+      Name: !Sub '${AWS::StackName}-Environment'
+
+  Region:
+    Description: 'AWS Region'
+    Value: !Ref AWS::Region
+    Export:
+      Name: !Sub '${AWS::StackName}-Region'

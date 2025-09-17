@@ -1,0 +1,10 @@
+name: "Auto Test Runner"
+description: "Automatically run tests when agent code is modified"
+trigger:
+  type: "file_save"
+  pattern: "agent_scrivener/**/*.py"
+actions:
+  - type: "shell_command"
+    command: "python -m pytest tests/unit/test_${filename}.py -v"
+  - type: "agent_execution"
+    prompt: "Review test results and suggest improvements if any tests failed"

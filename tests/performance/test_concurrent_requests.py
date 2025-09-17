@@ -523,5 +523,71 @@ class TestConcurrentRequests:
                 assert max_duration / min_duration < 5.0  # No request should take 5x longer than fastest
 
 
+    @pytest.mark.asyncio
+    async def test_concurrent_request_throughput_benchmarks(self):
+        """Benchmark throughput under various concurrent request scenarios."""
+        config = MockServiceConfig(
+            web_search_delay=0.001,
+            api_query_delay=0.001,
+            analysis_delay=0.002,
+            failure_rate=0.0
+        )
+        
+        framework = IntegrationTestFramework(config)
+        tester = ConcurrentRequestTester(framework)
+        
+        async with framework.test_environment():
+            # Benchmark different throughput scenarios
+            benchmark_scenarios = [
+                {"name": "Low Load", "concurrent": 2, "total": 10, "target_rps": 5.0},
+                {"name": "Medium Load", "concurrent": 5, "total": 25, "target_rps": 10.0},
+                {"name": "High Load", "concurrent": 10, "total": 50, "target_rps": 15.0},
+                {"name": "Burst Load", "concurrent": 20, "total": 40, "target_rps": 20.0}
+            ]
+            
+            benchmark_results = []
+            
+            for scenario in benchmark_scenarios:
+                print(f"\nBenchmarking {scenario['name']}...")
+                
+                metrics = await tester.test_concurrent_requests(
+                    concurrent_count=scenario["concurrent"],
+                    total_requests=scenario["total"]
+                )
+                
+                benchmark_results.append({
+                    "scenario": scenario["name"],
+                    "metrics": metrics,
+                    "target_rps": scenario["target_rps"],
+                    "achieved_rps": metrics.throughput_rps,
+                    "performance_ratio": metrics.throughput_rps / scenario["target_rps"]
+                })
+                
+                print(f"{scenario['name']} Results:")
+                print(f"  Target RPS: {scenario['target_rps']:.1f}")
+                print(f"  Achieved RPS: {metrics.throughput_rps:.2f}")
+                print(f"  Performance Ratio: {metrics.throughput_rps / scenario['target_rps']:.2f}")
+                print(f"  Error Rate: {metrics.error_rate_percent:.2f}%")
+                
+                # Performance assertions
+                assert metrics.error_rate_percent <= 20.0
+                assert metrics.throughput_rps > 0
+                
+                # For low and medium load, should meet target performance
+                if scenario["name"] in ["Low Load", "Medium Load"]:
+                    assert metrics.throughput_rps >= scenario["target_rps"] * 0.8
+            
+            # Analyze scaling characteristics across scenarios
+            throughputs = [r["achieved_rps"] for r in benchmark_results]
+            concurrencies = [s["concurrent"] for s in benchmark_scenarios]
+            
+            # Throughput should generally increase with concurrency (allowing for overhead)
+            for i in range(1, len(throughputs)):
+                if concurrencies[i] > concurrencies[i-1]:
+                    # Allow some degradation at high concurrency
+                    min_expected = throughputs[i-1] * 0.7
+                    assert throughputs[i] >= min_expected or throughputs[i] >= 10.0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

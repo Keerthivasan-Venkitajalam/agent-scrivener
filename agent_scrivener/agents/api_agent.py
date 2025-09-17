@@ -43,6 +43,9 @@ class APIAgent(BaseAgent):
         self.min_citation_count = 0
         self.max_concurrent_requests = 5
         
+        # MCP client for enhanced capabilities
+        self.mcp_client = None
+        
         # Database configurations
         self.databases = {
             'arxiv': {
@@ -603,6 +606,85 @@ class APIAgent(BaseAgent):
         logger.info(f"Ranked {len(ranked_papers)} papers by relevance and quality")
         return ranked_papers
     
+    async def enhanced_academic_search(self, query: str, filters: Dict[str, Any]) -> List[AcademicPaper]:
+        """
+        Enhanced academic search using MCP server for advanced filtering.
+        
+        Args:
+            query: Research query string
+            filters: Advanced filters (date_range, subjects, min_citations, etc.)
+            
+        Returns:
+            List of AcademicPaper objects with enhanced metadata
+        """
+        if not self.mcp_client:
+            # Fall back to standard search if MCP not available
+            return await self._perform_database_search(
+                query, 
+                max_results=filters.get('max_results', self.max_results_per_database),
+                min_citation_count=filters.get('min_citations', 0)
+            )
+        
+        try:
+            # Use MCP server for enhanced academic search
+            mcp_result = await self.mcp_client.call_tool(
+                "academic-search",
+                "search_papers",
+                {
+                    "query": query,
+                    "databases": ["arxiv", "pubmed", "semantic_scholar"],
+                    "date_range": filters.get("date_range"),
+                    "subject_areas": filters.get("subjects", []),
+                    "min_citations": filters.get("min_citations", 0),
+                    "max_results": filters.get("max_results", self.max_results_per_database)
+                }
+            )
+            
+            return self._process_mcp_academic_results(mcp_result)
+            
+        except Exception as e:
+            logger.warning(f"MCP academic search failed, falling back to standard search: {str(e)}")
+            # Fall back to standard search
+            return await self._perform_database_search(
+                query,
+                max_results=filters.get('max_results', self.max_results_per_database),
+                min_citation_count=filters.get('min_citations', 0)
+            )
+    
+    def _process_mcp_academic_results(self, mcp_result: Dict[str, Any]) -> List[AcademicPaper]:
+        """
+        Process MCP server academic search results.
+        
+        Args:
+            mcp_result: Raw MCP server response
+            
+        Returns:
+            List of processed AcademicPaper objects
+        """
+        papers = []
+        
+        for paper_data in mcp_result.get("papers", []):
+            try:
+                paper = AcademicPaper(
+                    title=paper_data.get("title", ""),
+                    authors=paper_data.get("authors", []),
+                    abstract=paper_data.get("abstract", ""),
+                    publication_year=paper_data.get("publication_year", 2024),
+                    doi=paper_data.get("doi"),
+                    database_source=paper_data.get("database_source", "MCP Enhanced"),
+                    citation_count=paper_data.get("citation_count", 0),
+                    keywords=paper_data.get("keywords", []),
+                    full_text_url=paper_data.get("url")
+                )
+                papers.append(paper)
+                
+            except Exception as e:
+                logger.warning(f"Failed to process MCP paper result: {str(e)}")
+                continue
+        
+        logger.info(f"Processed {len(papers)} papers from MCP academic search")
+        return papers
+
     async def health_check(self) -> Dict[str, Any]:
         """
         Perform health check on API agent.
@@ -617,10 +699,20 @@ class APIAgent(BaseAgent):
             
             gateway_health = await self.gateway.health_check()
             
+            # Test MCP integration if available
+            mcp_status = "not_configured"
+            if self.mcp_client:
+                try:
+                    await self.mcp_client.call_tool("academic-search", "health_check", {})
+                    mcp_status = "healthy"
+                except Exception:
+                    mcp_status = "unhealthy"
+            
             return {
                 'status': 'healthy',
                 'agent_name': self.name,
                 'gateway_wrapper_status': gateway_health.get('status', 'unknown'),
+                'mcp_status': mcp_status,
                 'test_search_successful': len(papers) > 0,
                 'test_papers_count': len(papers),
                 'available_databases': list(self.databases.keys()),

@@ -1,0 +1,345 @@
+# AWS API Gateway Configuration for Agent Scrivener
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'API Gateway configuration for Agent Scrivener multi-agent system'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: development
+    AllowedValues: [development, staging, production]
+    Description: Deployment environment
+  
+  AgentCoreEndpoint:
+    Type: String
+    Description: AgentCore Runtime endpoint URL
+  
+  DomainName:
+    Type: String
+    Default: ''
+    Description: Custom domain name for API (optional)
+  
+  CertificateArn:
+    Type: String
+    Default: ''
+    Description: ACM certificate ARN for custom domain (optional)
+
+Conditions:
+  HasCustomDomain: !Not [!Equals [!Ref DomainName, '']]
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, '']]
+
+Resources:
+  # API Gateway REST API
+  AgentScrivenerAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub 'agent-scrivener-api-${Environment}'
+      Description: 'Agent Scrivener Research Platform API'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Policy:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: 'execute-api:Invoke'
+            Resource: '*'
+            Condition:
+              IpAddress:
+                aws:SourceIp:
+                  - '0.0.0.0/0'  # Restrict this in production
+
+  # API Gateway Deployment
+  APIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - HealthCheckMethod
+      - ResearchMethod
+      - AgentsMethod
+    Properties:
+      RestApiId: !Ref AgentScrivenerAPI
+      Description: !Sub 'Deployment for ${Environment} environment'
+
+  # API Gateway Stage
+  APIStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref AgentScrivenerAPI
+      DeploymentId: !Ref APIDeployment
+      StageName: !Ref Environment
+      Description: !Sub '${Environment} stage for Agent Scrivener API'
+      Variables:
+        environment: !Ref Environment
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+          ThrottlingBurstLimit: 100
+          ThrottlingRateLimit: 50
+      AccessLogSetting:
+        DestinationArn: !GetAtt APIGatewayLogGroup.Arn
+        Format: >
+          {
+            "requestId": "$context.requestId",
+            "ip": "$context.identity.sourceIp",
+            "caller": "$context.identity.caller",
+            "user": "$context.identity.user",
+            "requestTime": "$context.requestTime",
+            "httpMethod": "$context.httpMethod",
+            "resourcePath": "$context.resourcePath",
+            "status": "$context.status",
+            "protocol": "$context.protocol",
+            "responseLength": "$context.responseLength",
+            "responseTime": "$context.responseTime",
+            "error": "$context.error.message",
+            "integrationError": "$context.integration.error"
+          }
+
+  # Health Check Resource
+  HealthCheckResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref AgentScrivenerAPI
+      ParentId: !GetAtt AgentScrivenerAPI.RootResourceId
+      PathPart: health
+
+  HealthCheckMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AgentScrivenerAPI
+      ResourceId: !Ref HealthCheckResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: HTTP_PROXY
+        IntegrationHttpMethod: GET
+        Uri: !Sub '${AgentCoreEndpoint}/health'
+        PassthroughBehavior: WHEN_NO_MATCH
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # Research Resource
+  ResearchResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref AgentScrivenerAPI
+      ParentId: !GetAtt AgentScrivenerAPI.RootResourceId
+      PathPart: research
+
+  ResearchMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AgentScrivenerAPI
+      ResourceId: !Ref ResearchResource
+      HttpMethod: POST
+      AuthorizationType: AWS_IAM
+      RequestValidatorId: !Ref RequestValidator
+      RequestModels:
+        application/json: !Ref ResearchRequestModel
+      Integration:
+        Type: HTTP_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub '${AgentCoreEndpoint}/research'
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestParameters:
+          integration.request.header.X-API-Key: 'context.identity.apiKey'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+          - StatusCode: 400
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+          - StatusCode: 500
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+        - StatusCode: 400
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+        - StatusCode: 500
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # Agents Status Resource
+  AgentsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref AgentScrivenerAPI
+      ParentId: !GetAtt AgentScrivenerAPI.RootResourceId
+      PathPart: agents
+
+  AgentsStatusResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref AgentScrivenerAPI
+      ParentId: !Ref AgentsResource
+      PathPart: status
+
+  AgentsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AgentScrivenerAPI
+      ResourceId: !Ref AgentsStatusResource
+      HttpMethod: GET
+      AuthorizationType: AWS_IAM
+      Integration:
+        Type: HTTP_PROXY
+        IntegrationHttpMethod: GET
+        Uri: !Sub '${AgentCoreEndpoint}/agents/status'
+        PassthroughBehavior: WHEN_NO_MATCH
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # Request Validator
+  RequestValidator:
+    Type: AWS::ApiGateway::RequestValidator
+    Properties:
+      RestApiId: !Ref AgentScrivenerAPI
+      Name: RequestValidator
+      ValidateRequestBody: true
+      ValidateRequestParameters: true
+
+  # Request Models
+  ResearchRequestModel:
+    Type: AWS::ApiGateway::Model
+    Properties:
+      RestApiId: !Ref AgentScrivenerAPI
+      ContentType: application/json
+      Name: ResearchRequest
+      Schema:
+        $schema: 'http://json-schema.org/draft-04/schema#'
+        title: Research Request
+        type: object
+        required:
+          - query
+        properties:
+          query:
+            type: string
+            minLength: 10
+            maxLength: 2000
+            description: Research query to process
+          max_sources:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+            description: Maximum number of sources to research
+          include_academic:
+            type: boolean
+            default: true
+            description: Include academic database sources
+          citation_style:
+            type: string
+            enum: [APA, MLA, Chicago]
+            default: APA
+            description: Citation style for references
+
+  # Usage Plan
+  UsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      UsagePlanName: !Sub 'agent-scrivener-${Environment}-plan'
+      Description: !Sub 'Usage plan for Agent Scrivener ${Environment} environment'
+      ApiStages:
+        - ApiId: !Ref AgentScrivenerAPI
+          Stage: !Ref APIStage
+      Throttle:
+        BurstLimit: 100
+        RateLimit: 50
+      Quota:
+        Limit: 10000
+        Period: DAY
+
+  # API Key
+  APIKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: !Sub 'agent-scrivener-${Environment}-key'
+      Description: !Sub 'API Key for Agent Scrivener ${Environment} environment'
+      Enabled: true
+
+  # Usage Plan Key
+  UsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref APIKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref UsagePlan
+
+  # Custom Domain (if specified)
+  CustomDomain:
+    Type: AWS::ApiGateway::DomainName
+    Condition: HasCustomDomain
+    Properties:
+      DomainName: !Ref DomainName
+      CertificateArn: !Ref CertificateArn
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # Base Path Mapping (if custom domain)
+  BasePathMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    Condition: HasCustomDomain
+    Properties:
+      DomainName: !Ref CustomDomain
+      RestApiId: !Ref AgentScrivenerAPI
+      Stage: !Ref APIStage
+
+  # CloudWatch Log Group for API Gateway
+  APIGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/agent-scrivener-${Environment}'
+      RetentionInDays: 30
+
+  # CloudWatch Log Group for Access Logs
+  AccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/agent-scrivener-${Environment}-access'
+      RetentionInDays: 7
+
+Outputs:
+  APIGatewayURL:
+    Description: 'API Gateway endpoint URL'
+    Value: !Sub 'https://${AgentScrivenerAPI}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-APIGatewayURL'
+
+  APIGatewayId:
+    Description: 'API Gateway ID'
+    Value: !Ref AgentScrivenerAPI
+    Export:
+      Name: !Sub '${AWS::StackName}-APIGatewayId'
+
+  APIKey:
+    Description: 'API Key for accessing the service'
+    Value: !Ref APIKey
+    Export:
+      Name: !Sub '${AWS::StackName}-APIKey'
+
+  CustomDomainURL:
+    Condition: HasCustomDomain
+    Description: 'Custom domain URL'
+    Value: !Sub 'https://${DomainName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomDomainURL'

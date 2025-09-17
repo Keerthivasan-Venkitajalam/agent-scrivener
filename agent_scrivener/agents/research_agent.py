@@ -43,6 +43,9 @@ class ResearchAgent(BaseAgent):
         self.min_content_length = 100
         self.quality_threshold = 0.3
         
+        # MCP client for enhanced capabilities
+        self.mcp_client = None
+        
         # Search engines and patterns
         self.search_engines = [
             "https://www.google.com/search?q={query}",
@@ -544,6 +547,153 @@ class ResearchAgent(BaseAgent):
         except Exception:
             return False
     
+    async def extract_with_mcp(self, url: str) -> ExtractedArticle:
+        """
+        Enhanced content extraction using MCP server.
+        
+        Args:
+            url: URL to extract content from
+            
+        Returns:
+            ExtractedArticle with enhanced metadata
+        """
+        if not self.mcp_client:
+            # Fall back to standard extraction if MCP not available
+            return await self.extract_content(url)
+        
+        try:
+            # Use MCP server for enhanced content extraction
+            extraction_result = await self.mcp_client.call_tool(
+                "web-research",
+                "extract_content",
+                {
+                    "url": url,
+                    "extract_images": True,
+                    "clean_html": True,
+                    "generate_summary": True,
+                    "extract_metadata": True
+                }
+            )
+            
+            return self._process_mcp_extraction_result(extraction_result, url)
+            
+        except Exception as e:
+            logger.warning(f"MCP content extraction failed for {url}, falling back to standard extraction: {str(e)}")
+            # Fall back to standard extraction
+            return await self.extract_content(url)
+    
+    def _process_mcp_extraction_result(self, mcp_result: Dict[str, Any], url: str) -> ExtractedArticle:
+        """
+        Process MCP server content extraction results.
+        
+        Args:
+            mcp_result: Raw MCP server response
+            url: Original URL
+            
+        Returns:
+            Processed ExtractedArticle object
+        """
+        try:
+            # Create source from MCP metadata
+            metadata = mcp_result.get("metadata", {})
+            source = Source(
+                url=url,
+                title=metadata.get("title", "Extracted Article"),
+                author=metadata.get("author"),
+                publication_date=metadata.get("publication_date"),
+                source_type=SourceType.WEB
+            )
+            
+            # Extract key findings from summary if available
+            summary = mcp_result.get("summary", "")
+            key_findings = self._extract_key_findings_from_summary(summary)
+            
+            # Calculate confidence score based on content quality
+            content = mcp_result.get("content", "")
+            confidence_score = self._calculate_mcp_confidence_score(content, metadata)
+            
+            article = ExtractedArticle(
+                source=source,
+                content=content,
+                key_findings=key_findings,
+                confidence_score=confidence_score,
+                extraction_timestamp=datetime.now(),
+                summary=summary,
+                images=mcp_result.get("images", []),
+                metadata=metadata
+            )
+            
+            logger.info(f"Successfully processed MCP extraction for {url}")
+            return article
+            
+        except Exception as e:
+            logger.error(f"Failed to process MCP extraction result: {str(e)}")
+            # Create minimal article as fallback
+            source = Source(
+                url=url,
+                title="Extraction Failed",
+                source_type=SourceType.WEB
+            )
+            return ExtractedArticle(
+                source=source,
+                content="",
+                key_findings=[],
+                confidence_score=0.0,
+                extraction_timestamp=datetime.now()
+            )
+    
+    def _extract_key_findings_from_summary(self, summary: str) -> List[str]:
+        """Extract key findings from MCP-generated summary."""
+        if not summary:
+            return []
+        
+        # Simple extraction - look for sentences with key indicators
+        key_indicators = [
+            "found that", "discovered", "shows that", "indicates",
+            "reveals", "demonstrates", "concludes", "suggests"
+        ]
+        
+        sentences = summary.split('.')
+        key_findings = []
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if len(sentence) > 20:  # Minimum length
+                for indicator in key_indicators:
+                    if indicator in sentence.lower():
+                        key_findings.append(sentence + '.')
+                        break
+        
+        return key_findings[:5]  # Limit to 5 key findings
+    
+    def _calculate_mcp_confidence_score(self, content: str, metadata: Dict[str, Any]) -> float:
+        """Calculate confidence score for MCP-extracted content."""
+        score = 0.0
+        
+        # Content length factor
+        if len(content) > 1000:
+            score += 0.3
+        elif len(content) > 500:
+            score += 0.2
+        elif len(content) > 100:
+            score += 0.1
+        
+        # Metadata completeness factor
+        metadata_fields = ['title', 'author', 'publication_date']
+        metadata_score = sum(1 for field in metadata_fields if metadata.get(field))
+        score += (metadata_score / len(metadata_fields)) * 0.3
+        
+        # Content quality indicators
+        quality_indicators = [
+            'abstract', 'introduction', 'conclusion', 'references',
+            'methodology', 'results', 'discussion'
+        ]
+        content_lower = content.lower()
+        quality_score = sum(1 for indicator in quality_indicators if indicator in content_lower)
+        score += min(quality_score / len(quality_indicators), 0.4)
+        
+        return min(score, 1.0)
+
     async def health_check(self) -> Dict[str, Any]:
         """
         Perform health check on research agent.

@@ -1,0 +1,10 @@
+name: "Deployment Validator"
+description: "Validate deployment configurations and run health checks"
+trigger:
+  type: "file_save"
+  pattern: "agent_scrivener/deployment/**/*.yml"
+actions:
+  - type: "shell_command"
+    command: "python agent_scrivener/deployment/validate.py"
+  - type: "agent_execution"
+    prompt: "Review the deployment validation results and fix any configuration issues found"

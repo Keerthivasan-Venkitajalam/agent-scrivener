@@ -205,6 +205,9 @@ class CitationAgent(BaseAgent):
         self.formatter = APACitationFormatter()
         self.url_validator = URLValidator()
         self.tracked_sources: Set[str] = set()
+        
+        # MCP client for enhanced capabilities
+        self.mcp_client = None
     
     async def execute(self, **kwargs) -> AgentResult:
         """Execute citation management tasks."""
@@ -460,3 +463,118 @@ class CitationAgent(BaseAgent):
             'original_length': len(content),
             'formatted_length': len(formatted_content)
         }
+    
+    async def format_citations_with_mcp(self, sources: List[Source]) -> List[str]:
+        """
+        Professional citation formatting using MCP server.
+        
+        Args:
+            sources: List of Source objects to format
+            
+        Returns:
+            List of formatted citation strings
+        """
+        if not self.mcp_client:
+            # Fall back to standard formatting if MCP not available
+            return [self.formatter.format_citation(source) for source in sources]
+        
+        formatted_citations = []
+        
+        for source in sources:
+            try:
+                # Use MCP server for professional citation formatting
+                citation_result = await self.mcp_client.call_tool(
+                    "citation-formatter",
+                    "format_citation",
+                    {
+                        "source_type": source.source_type.value if hasattr(source.source_type, 'value') else str(source.source_type),
+                        "title": source.title,
+                        "authors": getattr(source, 'authors', []) or [],
+                        "publication_date": source.publication_date.isoformat() if source.publication_date else None,
+                        "url": str(source.url),
+                        "doi": getattr(source, 'doi', None),
+                        "style": "APA"
+                    }
+                )
+                
+                formatted_citations.append(citation_result["formatted_citation"])
+                
+            except Exception as e:
+                logger.warning(f"MCP citation formatting failed for {source.url}, falling back to standard formatting: {str(e)}")
+                # Fall back to standard formatting
+                formatted_citations.append(self.formatter.format_citation(source))
+        
+        logger.info(f"Formatted {len(formatted_citations)} citations using MCP server")
+        return formatted_citations
+    
+    async def validate_doi_with_mcp(self, doi: str) -> Dict[str, Any]:
+        """
+        Validate DOI using MCP server.
+        
+        Args:
+            doi: DOI string to validate
+            
+        Returns:
+            Validation results with metadata
+        """
+        if not self.mcp_client:
+            # Fall back to basic validation if MCP not available
+            return {"valid": bool(re.match(r'^10\.\d{4,}/[^\s]+$', doi)), "metadata": {}}
+        
+        try:
+            # Use MCP server for DOI validation
+            validation_result = await self.mcp_client.call_tool(
+                "citation-formatter",
+                "validate_doi",
+                {"doi": doi}
+            )
+            
+            return validation_result
+            
+        except Exception as e:
+            logger.warning(f"MCP DOI validation failed for {doi}, falling back to basic validation: {str(e)}")
+            # Fall back to basic validation
+            return {"valid": bool(re.match(r'^10\.\d{4,}/[^\s]+$', doi)), "metadata": {}}
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Perform health check on citation agent.
+        
+        Returns:
+            Health check results
+        """
+        try:
+            # Test basic functionality
+            test_source = Source(
+                url="https://example.com/test",
+                title="Test Article",
+                source_type=SourceType.WEB
+            )
+            
+            test_citation = await self.track_sources("Test content", test_source)
+            
+            # Test MCP integration if available
+            mcp_status = "not_configured"
+            if self.mcp_client:
+                try:
+                    await self.mcp_client.call_tool("citation-formatter", "health_check", {})
+                    mcp_status = "healthy"
+                except Exception:
+                    mcp_status = "unhealthy"
+            
+            return {
+                'status': 'healthy',
+                'agent_name': self.name,
+                'mcp_status': mcp_status,
+                'test_citation_successful': test_citation is not None,
+                'tracked_sources_count': len(self.tracked_sources),
+                'citations_count': len(self.citation_tracker.citations),
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            return {
+                'status': 'unhealthy',
+                'agent_name': self.name,
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }

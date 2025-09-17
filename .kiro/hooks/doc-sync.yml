@@ -1,0 +1,8 @@
+name: "Documentation Synchronizer"
+description: "Keep documentation in sync with spec changes"
+trigger:
+  type: "file_save"
+  pattern: ".kiro/specs/agent-scrivener/*.md"
+actions:
+  - type: "agent_execution"
+    prompt: "Update the API documentation in docs/api_reference.md to reflect any changes in the spec files. Ensure all new endpoints and models are documented."

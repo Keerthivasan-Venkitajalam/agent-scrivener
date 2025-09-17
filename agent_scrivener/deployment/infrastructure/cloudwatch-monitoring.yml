@@ -1,0 +1,446 @@
+# CloudWatch Monitoring and Alerting for Agent Scrivener
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudWatch monitoring, alerting, and dashboards for Agent Scrivener'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: development
+    AllowedValues: [development, staging, production]
+    Description: Deployment environment
+  
+  ProjectName:
+    Type: String
+    Default: agent-scrivener
+    Description: Project name for resource naming
+  
+  AlertEmail:
+    Type: String
+    Description: Email address for critical alerts
+    Default: admin@example.com
+  
+  APIGatewayId:
+    Type: String
+    Description: API Gateway ID for monitoring
+  
+  AlertTopicArn:
+    Type: String
+    Description: SNS topic ARN for alerts
+
+Resources:
+  # CloudWatch Log Groups
+  AgentCoreLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/agentcore/${ProjectName}-${Environment}'
+      RetentionInDays: 30
+
+  PlannerAgentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/agentcore/${ProjectName}/planner-${Environment}'
+      RetentionInDays: 14
+
+  ResearchAgentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/agentcore/${ProjectName}/research-${Environment}'
+      RetentionInDays: 14
+
+  APIAgentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/agentcore/${ProjectName}/api-${Environment}'
+      RetentionInDays: 14
+
+  AnalysisAgentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/agentcore/${ProjectName}/analysis-${Environment}'
+      RetentionInDays: 14
+
+  DraftingAgentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/agentcore/${ProjectName}/drafting-${Environment}'
+      RetentionInDays: 14
+
+  CitationAgentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/agentcore/${ProjectName}/citation-${Environment}'
+      RetentionInDays: 14
+
+  # Custom Metrics
+  ResearchSessionsMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AgentCoreLogGroup
+      FilterPattern: '[timestamp, request_id, level="INFO", message="Research session started", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub '${ProjectName}/${Environment}'
+          MetricName: 'ResearchSessionsStarted'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  ResearchSessionsCompletedMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AgentCoreLogGroup
+      FilterPattern: '[timestamp, request_id, level="INFO", message="Research session completed", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub '${ProjectName}/${Environment}'
+          MetricName: 'ResearchSessionsCompleted'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  ErrorMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AgentCoreLogGroup
+      FilterPattern: '[timestamp, request_id, level="ERROR", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub '${ProjectName}/${Environment}'
+          MetricName: 'ErrorCount'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  AgentFailureMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AgentCoreLogGroup
+      FilterPattern: '[timestamp, request_id, level, message="Agent execution failed", agent_type, ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub '${ProjectName}/${Environment}'
+          MetricName: 'AgentFailures'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  # CloudWatch Alarms
+  HighErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-high-error-rate'
+      AlarmDescription: 'High error rate detected in Agent Scrivener'
+      MetricName: 'ErrorCount'
+      Namespace: !Sub '${ProjectName}/${Environment}'
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopicArn
+      TreatMissingData: notBreaching
+
+  AgentFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-agent-failures'
+      AlarmDescription: 'Multiple agent failures detected'
+      MetricName: 'AgentFailures'
+      Namespace: !Sub '${ProjectName}/${Environment}'
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopicArn
+      TreatMissingData: notBreaching
+
+  APIGatewayLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-api-latency'
+      AlarmDescription: 'High API Gateway latency'
+      MetricName: 'Latency'
+      Namespace: 'AWS/ApiGateway'
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub '${ProjectName}-api-${Environment}'
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10000  # 10 seconds
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopicArn
+      TreatMissingData: notBreaching
+
+  APIGateway4XXErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-api-4xx-errors'
+      AlarmDescription: 'High rate of 4XX errors from API Gateway'
+      MetricName: '4XXError'
+      Namespace: 'AWS/ApiGateway'
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub '${ProjectName}-api-${Environment}'
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 20
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopicArn
+      TreatMissingData: notBreaching
+
+  APIGateway5XXErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-api-5xx-errors'
+      AlarmDescription: 'Server errors from API Gateway'
+      MetricName: '5XXError'
+      Namespace: 'AWS/ApiGateway'
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub '${ProjectName}-api-${Environment}'
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopicArn
+      TreatMissingData: notBreaching
+
+  # CloudWatch Dashboard
+  AgentScrivenerDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub '${ProjectName}-${Environment}-dashboard'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "${ProjectName}/${Environment}", "ResearchSessionsStarted" ],
+                  [ ".", "ResearchSessionsCompleted" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Research Sessions",
+                "period": 300,
+                "stat": "Sum"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "${ProjectName}/${Environment}", "ErrorCount" ],
+                  [ ".", "AgentFailures" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Errors and Failures",
+                "period": 300,
+                "stat": "Sum"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApiGateway", "Count", "ApiName", "${ProjectName}-api-${Environment}" ],
+                  [ ".", "Latency", ".", "." ],
+                  [ ".", "4XXError", ".", "." ],
+                  [ ".", "5XXError", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "API Gateway Metrics",
+                "period": 300
+              }
+            },
+            {
+              "type": "log",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '/aws/agentcore/${ProjectName}-${Environment}'\n| fields @timestamp, @message\n| filter @message like /ERROR/\n| sort @timestamp desc\n| limit 20",
+                "region": "${AWS::Region}",
+                "title": "Recent Errors",
+                "view": "table"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 12,
+              "width": 8,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Logs", "IncomingLogEvents", "LogGroupName", "/aws/agentcore/${ProjectName}/planner-${Environment}" ],
+                  [ "...", "/aws/agentcore/${ProjectName}/research-${Environment}" ],
+                  [ "...", "/aws/agentcore/${ProjectName}/api-${Environment}" ],
+                  [ "...", "/aws/agentcore/${ProjectName}/analysis-${Environment}" ],
+                  [ "...", "/aws/agentcore/${ProjectName}/drafting-${Environment}" ],
+                  [ "...", "/aws/agentcore/${ProjectName}/citation-${Environment}" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Agent Activity",
+                "period": 300,
+                "stat": "Sum"
+              }
+            },
+            {
+              "type": "number",
+              "x": 8,
+              "y": 12,
+              "width": 8,
+              "height": 3,
+              "properties": {
+                "metrics": [
+                  [ "${ProjectName}/${Environment}", "ResearchSessionsStarted" ]
+                ],
+                "view": "singleValue",
+                "region": "${AWS::Region}",
+                "title": "Sessions Today",
+                "period": 86400,
+                "stat": "Sum"
+              }
+            },
+            {
+              "type": "number",
+              "x": 16,
+              "y": 12,
+              "width": 8,
+              "height": 3,
+              "properties": {
+                "metrics": [
+                  [ "${ProjectName}/${Environment}", "ErrorCount" ]
+                ],
+                "view": "singleValue",
+                "region": "${AWS::Region}",
+                "title": "Errors Today",
+                "period": 86400,
+                "stat": "Sum"
+              }
+            },
+            {
+              "type": "number",
+              "x": 8,
+              "y": 15,
+              "width": 8,
+              "height": 3,
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApiGateway", "Latency", "ApiName", "${ProjectName}-api-${Environment}" ]
+                ],
+                "view": "singleValue",
+                "region": "${AWS::Region}",
+                "title": "Avg Latency (ms)",
+                "period": 3600,
+                "stat": "Average"
+              }
+            },
+            {
+              "type": "number",
+              "x": 16,
+              "y": 15,
+              "width": 8,
+              "height": 3,
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApiGateway", "Count", "ApiName", "${ProjectName}-api-${Environment}" ]
+                ],
+                "view": "singleValue",
+                "region": "${AWS::Region}",
+                "title": "API Requests Today",
+                "period": 86400,
+                "stat": "Sum"
+              }
+            }
+          ]
+        }
+
+  # SNS Email Subscription
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      TopicArn: !Ref AlertTopicArn
+      Endpoint: !Ref AlertEmail
+
+  # CloudWatch Insights Queries
+  ErrorAnalysisQuery:
+    Type: AWS::Logs::QueryDefinition
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-error-analysis'
+      LogGroupNames:
+        - !Ref AgentCoreLogGroup
+      QueryString: |
+        fields @timestamp, @message, @logStream
+        | filter @message like /ERROR/
+        | stats count() by bin(5m)
+        | sort @timestamp desc
+
+  AgentPerformanceQuery:
+    Type: AWS::Logs::QueryDefinition
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-agent-performance'
+      LogGroupNames:
+        - !Ref AgentCoreLogGroup
+      QueryString: |
+        fields @timestamp, @message
+        | filter @message like /Agent execution/
+        | parse @message "Agent execution * in * ms"
+        | stats avg(duration) by agent_type
+        | sort avg desc
+
+  SessionAnalysisQuery:
+    Type: AWS::Logs::QueryDefinition
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-session-analysis'
+      LogGroupNames:
+        - !Ref AgentCoreLogGroup
+      QueryString: |
+        fields @timestamp, @message
+        | filter @message like /Research session/
+        | parse @message "Research session * for query: *"
+        | stats count() by status
+        | sort count desc
+
+Outputs:
+  DashboardURL:
+    Description: 'CloudWatch Dashboard URL'
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${ProjectName}-${Environment}-dashboard'
+    Export:
+      Name: !Sub '${AWS::StackName}-DashboardURL'
+
+  LogGroupArn:
+    Description: 'Main log group ARN'
+    Value: !GetAtt AgentCoreLogGroup.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LogGroupArn'
+
+  AlertTopicArn:
+    Description: 'SNS topic ARN for alerts'
+    Value: !Ref AlertTopicArn
+    Export:
+      Name: !Sub '${AWS::StackName}-AlertTopicArn'
