@@ -66,5 +66,8 @@ prompt.md
 pydantic_migration_verification.md
 test_mcp_integration.py
 
+# Demo/hackathon files
+demo/
+
 # Documentation builds
 docs/_build/
