@@ -519,9 +519,9 @@ Contributions are welcome! Whether you're fixing bugs, adding new agents, improv
 
 <div align="center">
 
-## Developers
+## Dev
 
-[Keerthivasan Venkitajalam](https://github.com/Keerthivasan-Venkitajalam)
+[Myself](https://github.com/Keerthivasan-Venkitajalam)
 
 **Agent Scrivener** is a production-ready research platform built for autonomous knowledge work.
 
