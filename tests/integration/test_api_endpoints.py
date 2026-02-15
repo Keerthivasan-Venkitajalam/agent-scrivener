@@ -4,7 +4,7 @@ Integration tests for API endpoints.
 
 import pytest
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
@@ -54,7 +54,7 @@ class TestAPIEndpoints:
             query="Test research query",
             status=ResearchStatus.PENDING,
             estimated_duration_minutes=30,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         mock_orchestrator.start_research.return_value = mock_session
         
@@ -117,8 +117,8 @@ class TestAPIEndpoints:
             current_task="Analyzing content",
             completed_tasks=["Search web", "Extract content"],
             estimated_time_remaining_minutes=15,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
         )
         mock_orchestrator.get_session_status.return_value = mock_session
         
@@ -161,8 +161,8 @@ class TestAPIEndpoints:
             sources_count=8,
             word_count=1500,
             completion_time_minutes=25.5,
-            created_at=datetime.utcnow(),
-            completed_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc)
         )
         mock_orchestrator.get_research_result.return_value = mock_result
         
@@ -187,7 +187,7 @@ class TestAPIEndpoints:
             user_id="test_user",
             query="Test query",
             status=ResearchStatus.IN_PROGRESS,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         mock_orchestrator.get_research_result.return_value = mock_result
         
@@ -245,16 +245,16 @@ class TestAPIEndpoints:
                 user_id="test_user",
                 query="Query 1",
                 status=ResearchStatus.COMPLETED,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
             ),
             ResearchSession(
                 session_id="session-2",
                 user_id="test_user",
                 query="Query 2",
                 status=ResearchStatus.IN_PROGRESS,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
             )
         ]
         mock_orchestrator.list_user_sessions.return_value = (mock_sessions, 2)
