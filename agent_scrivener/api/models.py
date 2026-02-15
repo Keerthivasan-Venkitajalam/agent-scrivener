@@ -4,7 +4,7 @@ API request and response models for Agent Scrivener.
 
 from pydantic import BaseModel, Field, HttpUrl
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -65,13 +65,13 @@ class ErrorResponse(BaseModel):
     error: str = Field(..., description="Error type")
     message: str = Field(..., description="Human-readable error message")
     details: Optional[Dict[str, Any]] = Field(None, description="Additional error details")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Error timestamp")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Error timestamp")
 
 
 class HealthCheck(BaseModel):
     """Health check response model."""
     status: str = Field(..., description="Service status")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Health check timestamp")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Health check timestamp")
     version: str = Field(..., description="API version")
     uptime_seconds: float = Field(..., description="Service uptime in seconds")
 
