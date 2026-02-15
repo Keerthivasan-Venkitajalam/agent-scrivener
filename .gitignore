@@ -69,5 +69,8 @@ test_mcp_integration.py
 # Demo/hackathon files
 demo/
 
+# Runtime data
+test_memory/
+
 # Documentation builds
 docs/_build/
