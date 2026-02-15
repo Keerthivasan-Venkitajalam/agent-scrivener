@@ -158,9 +158,9 @@ def get_config() -> SystemConfig:
         env_config = load_config_from_env()
         
         # Merge environment variables over file config
-        if env_config.dict(exclude_unset=True):
-            config_dict = _config.dict()
-            config_dict.update(env_config.dict(exclude_unset=True))
+        if env_config.model_dump(exclude_unset=True):
+            config_dict = _config.model_dump()
+            config_dict.update(env_config.model_dump(exclude_unset=True))
             _config = SystemConfig(**config_dict)
     
     return _config
