@@ -25,11 +25,8 @@ class Source(BaseModel):
     source_type: SourceType
     metadata: Dict[str, Any] = Field(default_factory=dict)
     
-    model_config = ConfigDict(
-        json_encoders={
-            datetime: lambda v: v.isoformat()
-        }
-    )
+    # Pydantic v2: Removed json_encoders as datetime serialization is automatic
+    model_config = ConfigDict()
 
 
 class ExtractedArticle(BaseModel):
@@ -57,6 +54,8 @@ class ExtractedArticle(BaseModel):
 class AcademicPaper(BaseModel):
     """Academic paper metadata and content."""
     title: str = Field(..., min_length=1, max_length=500)
+    # Pydantic v2: Using min_length for List fields (replaces deprecated min_items)
+    # Behavior is identical - both enforce minimum list length
     authors: List[str] = Field(..., min_length=1)
     abstract: str = Field(..., min_length=1)
     publication_year: int = Field(..., ge=1900, le=2030)
