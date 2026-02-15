@@ -5,7 +5,7 @@ Integration tests for WebSocket functionality.
 import pytest
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
@@ -37,8 +37,8 @@ class TestWebSocketConnection:
             current_task="Searching web",
             completed_tasks=["Planning"],
             estimated_time_remaining_minutes=20,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
         )
         mock_orchestrator.get_session_status.return_value = mock_session
         
@@ -83,8 +83,8 @@ class TestWebSocketConnection:
             user_id="ws_test_user",
             query="Test query",
             status=ResearchStatus.IN_PROGRESS,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
         )
         mock_orchestrator.get_session_status.return_value = mock_session
         
@@ -113,8 +113,8 @@ class TestWebSocketConnection:
             query="Test query",
             status=ResearchStatus.IN_PROGRESS,
             progress_percentage=50.0,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
         )
         mock_orchestrator.get_session_status.return_value = mock_session
         
