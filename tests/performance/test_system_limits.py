@@ -863,10 +863,4 @@ class TestSystemLimits:
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])hould have some successful operations
-            assert recovery_ratio >= 0.7  # Should recover to at least 70% of baseline performance
-            assert recovery_successful >= baseline_successful * 0.8  # Should maintain similar success count
-
-
-if __name__ == "__main__":
     pytest.main([__file__, "-v"])
