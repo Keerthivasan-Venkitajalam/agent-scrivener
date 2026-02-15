@@ -2,7 +2,7 @@
 Analysis-specific data models for Agent Scrivener.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from .core import Source
@@ -20,7 +20,9 @@ class NamedEntity(BaseModel):
 class TopicModel(BaseModel):
     """Topic modeling results."""
     topic_id: int = Field(..., ge=0)
-    keywords: List[str] = Field(..., min_items=1)
+    # Pydantic v2: Replaced min_items with min_length for List fields
+    # Behavior is identical - both enforce minimum list length
+    keywords: List[str] = Field(..., min_length=1)
     weight: float = Field(..., ge=0.0, le=1.0)
     description: Optional[str] = None
 
@@ -46,8 +48,11 @@ class AnalysisResults(BaseModel):
     analysis_timestamp: datetime = Field(default_factory=datetime.now)
     processing_time_seconds: Optional[float] = None
     
-    class Config:
-        json_schema_extra = {
+    # Pydantic v2: Replaced class Config with model_config = ConfigDict()
+    # This is the new pattern for model configuration in Pydantic v2
+    # json_schema_extra is passed as a parameter to ConfigDict
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "session_id": "research_001",
                 "named_entities": [
@@ -71,3 +76,4 @@ class AnalysisResults(BaseModel):
                 "sentiment_scores": {"overall": 0.7, "methodology": 0.8}
             }
         }
+    )
