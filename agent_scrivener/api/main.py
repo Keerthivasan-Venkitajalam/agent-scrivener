@@ -105,7 +105,7 @@ async def not_found_handler(request: Request, exc):
             error="NOT_FOUND",
             message="The requested resource was not found",
             details={"path": str(request.url.path)}
-        ).dict()
+        ).model_dump(mode='json')
     )
 
 
@@ -118,7 +118,7 @@ async def internal_error_handler(request: Request, exc):
         content=ErrorResponse(
             error="INTERNAL_ERROR",
             message="An internal server error occurred"
-        ).dict()
+        ).model_dump(mode='json')
     )
 
 
