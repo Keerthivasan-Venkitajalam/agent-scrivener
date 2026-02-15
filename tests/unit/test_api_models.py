@@ -3,7 +3,7 @@ Unit tests for API models.
 """
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import ValidationError
 
 from agent_scrivener.api.models import (
@@ -75,7 +75,7 @@ class TestResearchResponse:
     
     def test_valid_response(self):
         """Test valid research response."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         response = ResearchResponse(
             session_id="test-session-123",
             status=ResearchStatus.PENDING,
@@ -96,7 +96,7 @@ class TestSessionStatus:
     
     def test_valid_status(self):
         """Test valid session status."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         status = SessionStatus(
             session_id="test-session-123",
             status=ResearchStatus.IN_PROGRESS,
@@ -117,7 +117,7 @@ class TestSessionStatus:
     
     def test_invalid_progress_percentage(self):
         """Test validation error for invalid progress percentage."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         with pytest.raises(ValidationError):
             SessionStatus(
@@ -143,7 +143,7 @@ class TestResearchResult:
     
     def test_valid_result(self):
         """Test valid research result."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         result = ResearchResult(
             session_id="test-session-123",
             status=ResearchStatus.COMPLETED,
