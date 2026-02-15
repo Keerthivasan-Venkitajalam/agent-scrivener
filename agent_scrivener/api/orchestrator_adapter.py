@@ -4,7 +4,7 @@ API adapter for the AgentOrchestrator to provide the interface expected by API r
 
 import uuid
 from typing import List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..orchestration.orchestrator import AgentOrchestrator
 from ..agents.planner_agent import PlannerAgent
@@ -75,7 +75,7 @@ class APIOrchestrator:
                 query=query,
                 status=ResearchStatus.PENDING,
                 estimated_duration_minutes=plan.estimated_duration_minutes,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 plan=plan
             )
             
@@ -127,7 +127,7 @@ class APIOrchestrator:
                 session.progress_percentage = self._calculate_progress_percentage(orchestrator_session)
                 session.current_task = self._get_current_task(orchestrator_session)
                 session.completed_tasks = self._get_completed_tasks(orchestrator_session)
-                session.updated_at = datetime.utcnow()
+                session.updated_at = datetime.now(timezone.utc)
             
             return session
             
@@ -191,7 +191,7 @@ class APIOrchestrator:
             
             # Update session status
             session.status = ResearchStatus.CANCELLED
-            session.updated_at = datetime.utcnow()
+            session.updated_at = datetime.now(timezone.utc)
             session.error_message = reason or "Cancelled by user"
             
             # Cancel orchestrator session if active
@@ -357,7 +357,7 @@ class APIOrchestrator:
             # Update session
             session.progress_percentage = progress
             session.current_task = task
-            session.updated_at = datetime.utcnow()
+            session.updated_at = datetime.now(timezone.utc)
             
             if progress < 100:
                 session.status = ResearchStatus.IN_PROGRESS
@@ -378,7 +378,7 @@ class APIOrchestrator:
             else:
                 # Session completed
                 session.status = ResearchStatus.COMPLETED
-                session.completed_at = datetime.utcnow()
+                session.completed_at = datetime.now(timezone.utc)
                 session.document_content = self._generate_sample_document(session.query)
                 session.sources_count = 8
                 session.word_count = len(session.document_content.split())
