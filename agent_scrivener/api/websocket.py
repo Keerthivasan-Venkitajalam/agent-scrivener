@@ -5,7 +5,7 @@ WebSocket endpoints for real-time progress updates.
 import json
 import asyncio
 from typing import Dict, Set
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.routing import APIRouter
 
@@ -127,7 +127,7 @@ async def websocket_progress_endpoint(websocket: WebSocket, session_id: str, tok
             "current_task": session.current_task,
             "completed_tasks": session.completed_tasks,
             "estimated_time_remaining_minutes": session.estimated_time_remaining_minutes,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         await manager.send_personal_message(websocket, initial_status)
         
@@ -141,7 +141,7 @@ async def websocket_progress_endpoint(websocket: WebSocket, session_id: str, tok
                 if message.get("type") == "ping":
                     await manager.send_personal_message(websocket, {
                         "type": "pong",
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": datetime.now(timezone.utc).isoformat()
                     })
                 elif message.get("type") == "request_status":
                     # Send current status
@@ -155,7 +155,7 @@ async def websocket_progress_endpoint(websocket: WebSocket, session_id: str, tok
                             "current_task": current_session.current_task,
                             "completed_tasks": current_session.completed_tasks,
                             "estimated_time_remaining_minutes": current_session.estimated_time_remaining_minutes,
-                            "timestamp": datetime.utcnow().isoformat()
+                            "timestamp": datetime.now(timezone.utc).isoformat()
                         }
                         await manager.send_personal_message(websocket, status_update)
                 
@@ -200,7 +200,7 @@ class ProgressTracker:
             "completed_tasks": completed_tasks or [],
             "estimated_time_remaining_minutes": estimated_time_remaining_minutes,
             "error_message": error_message,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
         await self.manager.send_session_update(session_id, update_data)
@@ -212,7 +212,7 @@ class ProgressTracker:
             "type": "task_started",
             "session_id": session_id,
             "task_name": task_name,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
         await self.manager.send_session_update(session_id, update_data)
@@ -224,7 +224,7 @@ class ProgressTracker:
             "session_id": session_id,
             "task_name": task_name,
             "result_summary": result_summary,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
         await self.manager.send_session_update(session_id, update_data)
@@ -235,7 +235,7 @@ class ProgressTracker:
             "type": "session_completed",
             "session_id": session_id,
             "final_result": final_result,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
         await self.manager.send_session_update(session_id, update_data)
@@ -246,7 +246,7 @@ class ProgressTracker:
             "type": "session_failed",
             "session_id": session_id,
             "error_message": error_message,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
         await self.manager.send_session_update(session_id, update_data)
