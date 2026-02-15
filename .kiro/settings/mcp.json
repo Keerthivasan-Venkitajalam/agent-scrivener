@@ -2,30 +2,45 @@
   "mcpServers": {
     "academic-search": {
       "command": "uvx",
-      "args": ["academic-search-mcp@latest"],
+      "args": [
+        "academic-search-mcp@latest"
+      ],
       "env": {
         "FASTMCP_LOG_LEVEL": "ERROR"
       },
       "disabled": false,
-      "autoApprove": ["search_papers", "get_paper_details"]
+      "autoApprove": [
+        "search_papers",
+        "get_paper_details",
+        "search_arxiv",
+        "search_semantic",
+        "search_openalex",
+        "search_core"
+      ]
     },
     "web-research": {
-      "command": "uvx", 
-      "args": ["web-research-mcp@latest"],
-      "env": {
-        "FASTMCP_LOG_LEVEL": "ERROR"
-      },
+      "command": "/Users/keerthivasan/miniconda3/bin/python",
+      "args": [
+        "/Users/keerthivasan/Development/agent-scrivener/mcp_servers/web_research_server.py"
+      ],
       "disabled": false,
-      "autoApprove": ["extract_content", "search_web"]
+      "autoApprove": [
+        "search_web",
+        "extract_content",
+        "get_page_metadata"
+      ]
     },
     "citation-formatter": {
-      "command": "uvx",
-      "args": ["citation-mcp@latest"],
-      "env": {
-        "FASTMCP_LOG_LEVEL": "ERROR"
-      },
+      "command": "/Users/keerthivasan/miniconda3/bin/python",
+      "args": [
+        "/Users/keerthivasan/Development/agent-scrivener/mcp_servers/citation_formatter_server.py"
+      ],
       "disabled": false,
-      "autoApprove": ["format_citation", "validate_doi"]
+      "autoApprove": [
+        "format_citation",
+        "validate_doi",
+        "generate_bibliography"
+      ]
     }
   }
 }
