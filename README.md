@@ -6,7 +6,7 @@
 
 **From research queries to comprehensive, cited documents in seconds.**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg?style=for-the-badge)](https://github.com/Keerthivasan-Venkitajalam/agent-scrivener)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg?style=for-the-badge)](https://github.com/Keerthivasan-Venkitajalam/Agent-Scrivener)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9+-yellow?style=for-the-badge&logo=python)](https://python.org)
 [![MCP-Enabled](https://img.shields.io/badge/MCP-Enabled-purple?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -235,7 +235,7 @@ Once integrated, your IDE will have access to:
 
 1. **Clone the repository**:
 ```bash
-git clone https://github.com/Keerthivasan-Venkitajalam/agent-scrivener.git
+git clone https://github.com/Keerthivasan-Venkitajalam/Agent-Scrivener.git
 cd agent-scrivener
 ```
 
@@ -519,13 +519,13 @@ Contributions are welcome! Whether you're fixing bugs, adding new agents, improv
 
 <div align="center">
 
-## Dev
+## Devs
 
 [Myself](https://github.com/Keerthivasan-Venkitajalam)
 
 **Agent Scrivener** is a production-ready research platform built for autonomous knowledge work.
 
-[Report Bug](https://github.com/Keerthivasan-Venkitajalam/agent-scrivener/issues) • [Request Feature](https://github.com/Keerthivasan-Venkitajalam/agent-scrivener/issues)
+[Report Bug](https://github.com/Keerthivasan-Venkitajalam/Agent-Scrivener/issues) • [Request Feature](https://github.com/Keerthivasan-Venkitajalam/Agent-Scrivener/issues)
 
 ## License
 
@@ -540,6 +540,6 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ---
 
-Built with ❤️ for researchers and developers
+Built for researchers and developers
 
 </div>
